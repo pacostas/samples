@@ -25,7 +25,7 @@ var (
 
 func init() {
 	flag.Var(&builders, "name", "the name a builder to test with")
-	flag.StringVar(&pullPolicy, "pull-policy", "never", "image pull policy: always or never")
+	flag.StringVar(&pullPolicy, "pull-policy", "never", "image pull policy")
 }
 
 func TestNodejs(t *testing.T) {

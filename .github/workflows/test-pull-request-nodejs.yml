@@ -15,16 +15,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  define-builders:
+    name: Define Builders
+    runs-on: ubuntu-latest
+
+    outputs:
+      builders: ${{ steps.builders.outputs.builders }}
+
+    steps:
+      - name: Get Builders
+        id: builders
+        run: |
+          builders=$(jq -n -c '[
+              {"name": "paketobuildpacks/builder-jammy-full:latest"},
+              {"name": "paketobuildpacks/builder-jammy-base:latest"},
+              {"name": "paketobuildpacks/ubuntu-noble-builder:latest"},
+              {"name": "paketobuildpacks/builder-ubi8-base:latest", "pull_policy": "always"},
+              {"name": "paketobuildpacks/ubi-9-builder:latest", "pull_policy": "always"},
+              {"name": "paketobuildpacks/ubi-10-builder:latest", "pull_policy": "always"}
+            ] | map(.pull_policy = (.pull_policy // "never"))')
+
+          echo "builders=$builders" >> "$GITHUB_OUTPUT"
+
   smoke:
     name: Smoke Tests
     runs-on: ubuntu-latest
+    needs: [define-builders]
     strategy:
       fail-fast: false
       max-parallel: 3
       matrix:
-        builder:
-        - 'paketobuildpacks/builder-jammy-full:latest'
-        - 'paketobuildpacks/builder-jammy-base:latest'
+        builders: ${{ fromJSON(needs.define-builders.outputs.builders) }}
+
+
     steps:
     - name: Setup Go
       uses: actions/setup-go@v6
@@ -37,4 +60,5 @@ jobs:
     - name: Test Nodejs Samples
       run: |
         ./scripts/smoke.sh --suite nodejs \
-                           --builder ${{ matrix.builder }}
+                           --builder ${{ matrix.builders.name }} \
+                           --pull-policy ${{ matrix.builders.pull_policy }}
