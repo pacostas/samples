@@ -13,9 +13,10 @@ source "${PROGDIR}/.util/tools.sh"
 source "${PROGDIR}/.util/print.sh"
 
 function main() {
-  local builderArray suiteArray
+  local builderArray suiteArray pullPolicy
   builderArray=()
   suiteArray=()
+  pullPolicy="never"
 
   while [[ "${#}" != 0 ]]; do
     case "${1}" in
@@ -27,6 +28,11 @@ function main() {
 
       --builder|-b)
         builderArray+=("${2}")
+        shift 2
+        ;;
+
+      --pull-policy|-p)
+        pullPolicy="${2}"
         shift 2
         ;;
 
@@ -50,8 +56,8 @@ function main() {
   fi
 
   if [[ ! ${builderArray[@]+"${builderArray[@]}"} ]]; then
-    builderArray+=("paketobuildpacks/builder-jammy-full:latest")
-    util::print::info "No builder specified. Running with jammy full builder (paketobuildpacks/builder-jammy-full:latest)"
+    util::print::error "No builder specified. Please specify a builder."
+    exit 1
   fi
 
   if [[ ! ${suiteArray[@]+"${suiteArray[@]}"} ]]; then
@@ -66,7 +72,7 @@ function main() {
     image::pull::run_image "${name}"
   done
 
-  tests::run ${builderArray[@]/#/--name } ${suiteArray[@]/#/--suite }
+  tests::run ${builderArray[@]/#/--name } ${suiteArray[@]/#/--suite } --pull-policy "${pullPolicy}"
 }
 
 function usage() {
@@ -76,9 +82,10 @@ smoke.sh [OPTIONS]
 Runs the smoke test suite.
 
 OPTIONS
-  --help        -h         prints the command usage
-  --builder <name> -b <name>  sets the name of the builder(s) that is built for testing. Defaults to Full Builder if nothing passed.
-  --suite <name> -s <name>  selects the test suites to run (e.g. dotnet-core, nodejs). Defaults to running all suites.
+  --help                  -h          prints the command usage
+  --builder <name>        -b <name>   (Required) sets the name of the builder(s) that is built for testing.
+  --pull-policy <policy>  -p <policy> image pull policy. Defaults to never.
+  --suite <name>          -s <name>   selects the test suites to run (e.g. dotnet-core, nodejs). Defaults to running all suites.
 USAGE
 }
 
@@ -120,13 +127,19 @@ function image::pull::run_image() {
   docker pull "${run_image}"
 }
 function tests::run() {
-  local builderArray suiteArray
+  local builderArray suiteArray pullPolicy
   builderArray=()
   suiteArray=()
+  pullPolicy="never"
   while [[ "${#}" != 0 ]]; do
     case "${1}" in
       --name)
         builderArray+=("${2}")
+        shift 2
+        ;;
+
+      --pull-policy)
+        pullPolicy="${2}"
         shift 2
         ;;
 
@@ -146,7 +159,7 @@ function tests::run() {
   testout=$(mktemp)
   # pushd "${SAMPLESDIR}"/tests > /dev/null
   # ignore shellcheck double quote error, we want the builderArray to be split 
-  if GOMAXPROCS="${GOMAXPROCS:-4}" go test -count=1 -timeout 0 ${suiteArray[@]/#/./} -v  ${builderArray[@]/#/--name } | tee "${testout}"; then
+  if GOMAXPROCS="${GOMAXPROCS:-4}" go test -count=1 -timeout 0 ${suiteArray[@]/#/./} -v -pull-policy "${pullPolicy}" ${builderArray[@]/#/--name } | tee "${testout}"; then
       util::tools::tests::checkfocus "${testout}"
       util::print::success "** GO Test Succeeded **"
     else
