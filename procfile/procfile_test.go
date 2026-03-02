@@ -17,9 +17,11 @@ import (
 )
 
 var builders tests.BuilderFlags
+var pullPolicy string
 
 func init() {
 	flag.Var(&builders, "name", "the name a builder to test with")
+	flag.StringVar(&pullPolicy, "pull-policy", "never", "image pull policy")
 }
 
 func TestProcfile(t *testing.T) {
@@ -81,7 +83,7 @@ func testProcfileWithBuilder(builder string) func(*testing.T, spec.G, spec.S) {
 
 					var logs fmt.Stringer
 					image, logs, err = pack.Build.
-						WithPullPolicy("always").
+						WithPullPolicy(pullPolicy).
 						WithBuilder(builder).
 						WithBuildpacks(
 							"index.docker.io/paketobuildpacks/go-dist",
