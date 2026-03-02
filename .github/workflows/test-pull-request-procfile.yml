@@ -8,23 +8,58 @@ on:
     paths:
     - 'procfile/**'
 
+concurrency:
+  # only one instance of test suite per PR at one time
+  group: pr-${{ github.event.number }}
+  cancel-in-progress: true
+
 jobs:
-  smoke:
-    name: Smoke Tests
+  define-builders:
+    name: Define Builders
     runs-on: ubuntu-latest
+
+    outputs:
+      builders: ${{ steps.builders.outputs.builders }}
+
     steps:
-    - name: Setup Go
-      uses: actions/setup-go@v6
-      with:
-        go-version: 1.25.x
+      - name: Get Builders
+        id: builders
+        run: |
+          builders=$(jq -n -c '[
+              {"name": "paketobuildpacks/builder-jammy-buildpackless-base:latest"},
+              {"name": "paketobuildpacks/builder-jammy-base:latest"},
+              {"name": "paketobuildpacks/ubuntu-noble-builder-buildpackless:latest"},
+              {"name": "paketobuildpacks/ubuntu-noble-builder:latest"},
+              {"name": "paketobuildpacks/builder-ubi8-buildpackless-base:latest", "pull_policy": "always"},
+              {"name": "paketobuildpacks/builder-ubi8-base:latest", "pull_policy": "always"},
+              {"name": "paketobuildpacks/ubi-9-builder-buildpackless:latest", "pull_policy": "always"},
+              {"name": "paketobuildpacks/ubi-9-builder:latest", "pull_policy": "always"},
+              {"name": "paketobuildpacks/ubi-10-builder-buildpackless:latest", "pull_policy": "always"},
+              {"name": "paketobuildpacks/ubi-10-builder:latest", "pull_policy": "always"}
+            ] | map(.pull_policy = (.pull_policy // "never"))')
 
-    - name: Checkout
-      uses: actions/checkout@v6
+          echo "builders=$builders" >> "$GITHUB_OUTPUT"
+          smoke:
+            name: Smoke Tests
+            runs-on: ubuntu-latest
+            needs: [define-builders]
+            strategy:
+              fail-fast: false
+              max-parallel: 3
+              matrix:
+                builders: ${{ fromJSON(needs.define-builders.outputs.builders) }}
 
-    - name: Test Procfile Samples
-      run: |
-        ./scripts/smoke.sh --suite procfile \
-                           --builder docker.io/paketobuildpacks/builder-jammy-buildpackless-base:latest \
-                           --builder docker.io/paketobuildpacks/builder-jammy-base:latest \
-                           --builder docker.io/paketobuildpacks/ubuntu-noble-builder-buildpackless:latest \
-                           --builder docker.io/paketobuildpacks/ubuntu-noble-builder:latest
+            steps:
+            - name: Setup Go
+              uses: actions/setup-go@v6
+              with:
+                go-version: 1.25.x
+
+            - name: Checkout
+              uses: actions/checkout@v6
+
+            - name: Test Procfile Samples
+              run: |
+                ./scripts/smoke.sh --suite procfile \
+                                   --builder ${{ matrix.builders.name }} \
+                                   --pull-policy ${{ matrix.builders.pull_policy }}
