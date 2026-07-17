@@ -11,7 +11,7 @@
     "url": "https://github.com/paketo-buildpacks/samples"
   },
   "scripts": {
-    "start": "echo \"start\" && node server.js"
+    "start": "node server.js"
   },
   "version": "0.0.0"
 }
